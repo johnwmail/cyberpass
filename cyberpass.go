@@ -16,9 +16,9 @@ import (
 	"golang.org/x/term"
 )
 
-const CYBERARK_URL = "https://pam.example.com"
-
 var debug bool
+var cyberark_url string
+var username, password string
 var tomorrow string
 var buildTime, commitHash string
 var browser = flag.Bool("b", false, "Enable browser mode")
@@ -60,7 +60,7 @@ func main() {
 	tomorrow = nextDay.Format("1/2/2006")
 	inventoryFile := "inventory-" + now + ".ini"
 
-	hostFilefd := OpenHostFile(*hostnameFile)
+	hostFilefd := openHostFile(*hostnameFile)
 	defer hostFilefd.Close()
 
 	inventory, err := os.OpenFile(inventoryFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
@@ -380,7 +380,7 @@ func gotoCyberArk(ctx context.Context) {
 	debugPrintf("Go to CyberArk\n")
 
 	err := chromedp.Run(ctx,
-		chromedp.Navigate(CYBERARK_URL),
+		chromedp.Navigate(cyberark_url),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -388,6 +388,9 @@ func gotoCyberArk(ctx context.Context) {
 }
 
 func initChromedp() (context.Context, context.CancelFunc) {
+	if *browser {
+		userInfo()
+	}
 	// Create a new context
 	var ctx context.Context
 	var cancel context.CancelFunc
@@ -415,12 +418,13 @@ func initChromedp() (context.Context, context.CancelFunc) {
 }
 
 func loginCyberArk(ctx context.Context) {
-	var username, password string
-	UserInfo(&username, &password)
+	if !*browser {
+		userInfo()
+	}
 
 	// Navigate to a website
 	err := chromedp.Run(ctx,
-		chromedp.Navigate(CYBERARK_URL),
+		chromedp.Navigate(cyberark_url),
 		chromedp.WaitVisible("#pvBody_PageTemplate_innerHolder_ctrlLogon_txtUsername", chromedp.ByID),
 		chromedp.SendKeys("#pvBody_PageTemplate_innerHolder_ctrlLogon_txtUsername", username, chromedp.ByID),
 		chromedp.WaitVisible("#pvBody_PageTemplate_innerHolder_ctrlLogon_txtPassword", chromedp.ByID),
@@ -461,7 +465,7 @@ func loginCyberArk(ctx context.Context) {
 	}
 }
 
-func OpenHostFile(hostnameFile string) *os.File {
+func openHostFile(hostnameFile string) *os.File {
 	// Open the file in read-only mode
 	file, err := os.Open(hostnameFile)
 	if err != nil {
@@ -475,11 +479,19 @@ func OpenHostFile(hostnameFile string) *os.File {
 	return file
 }
 
-func UserInfo(user *string, pass *string) {
+func userInfo() {
 	cyberuserEnv := os.Getenv("_CYBERUSER")
 	cyberpassEnv := os.Getenv("_CYBERPASS")
+	cyberurlEnv := os.Getenv("_CYBERURL")
 
-	var username string
+	if cyberurlEnv != "" {
+		cyberark_url = cyberurlEnv
+		fmt.Printf("Enter Cyberark URL: %s\n", cyberark_url)
+	} else {
+		fmt.Print("Enter Cyberark URL: ")
+		fmt.Scanln(&cyberark_url)
+	}
+
 	if cyberuserEnv != "" {
 		username = cyberuserEnv
 		fmt.Printf("Enter your username: %s\n", username)
@@ -488,7 +500,6 @@ func UserInfo(user *string, pass *string) {
 		fmt.Scanln(&username)
 	}
 
-	var password string
 	fmt.Printf("Enter your password: ")
 	if cyberpassEnv != "" {
 		password = cyberpassEnv
@@ -503,7 +514,4 @@ func UserInfo(user *string, pass *string) {
 	//fmt.Printf("Enter your password: %s\n", password)
 	fmt.Printf("===>  Open your mobile to tap the Duo  <===\n")
 	fmt.Printf("\n")
-
-	*user = username
-	*pass = password
 }
